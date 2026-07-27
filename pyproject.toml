@@ -3,28 +3,50 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "parquet-guard-demo"
-version = "0.1.0"
-description = "A fail-closed, idempotent Parquet batch-pipeline reliability demonstration"
+name = "agentsor-file"
+version = "0.2.0"
+description = "Local CSV and Parquet contracts with redacted hosted receipts"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Agentsor" }]
+keywords = ["csv", "parquet", "data-contracts", "schema-validation"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = [
   "pyarrow>=16,<24",
 ]
 
+[project.urls]
+Homepage = "https://agentsor.ai/file-contracts"
+Repository = "https://github.com/linkoinsight/agentsor-file"
+Issues = "https://github.com/linkoinsight/agentsor-file/issues"
+
 [project.optional-dependencies]
 dev = [
+  "build>=1.2,<2",
+  "jsonschema>=4.23,<5",
   "pytest>=8,<10",
   "ruff>=0.12,<0.14",
 ]
 
 [project.scripts]
+agentsor-file = "parquet_guard.file_cli:main"
 parquet-guard = "parquet_guard.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+parquet_guard = ["py.typed", "schemas/*.json"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentsor:file-contract-error:v1",
+  "title": "Agentsor File Contract Error v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "error"],
+  "properties": {
+    "schema": {
+      "const": "agentsor.file-contract-error/v1"
+    },
+    "error": {
+      "enum": [
+        "invalid_contract",
+        "invalid_state",
+        "invalid_fingerprint_key",
+        "invalid_envelope",
+        "invalid_ingest_token",
+        "invalid_token_file",
+        "invalid_input",
+        "unsupported_format",
+        "state_target_conflict",
+        "credential_target_conflict",
+        "transport_error",
+        "rate_limited",
+        "temporarily_unavailable",
+        "contract_mismatch",
+        "idempotency_conflict",
+        "report_rejected",
+        "invalid_receipt",
+        "init_target_conflict",
+        "init_target_exists",
+        "init_failed",
+        "internal_error"
+      ]
+    }
+  }
+}
