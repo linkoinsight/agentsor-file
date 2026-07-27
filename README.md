@@ -70,4 +70,10 @@ A production implementation would also add a stable-file/producer handshake,
 destination-specific idempotency, a run lock, backpressure, retention, metrics,
 and integration tests against the authorized target.
 
+## Bounded implementation
+
+For bounded Python, API, PostgreSQL, and data-pipeline implementation with
+explicit acceptance tests and handoff, see the current [Agentsor Automation
+Reliability scope](https://agentsor.ai/).
+
 License: MIT.
