@@ -27,7 +27,7 @@ Python 3.11 or newer is required. Install the published package:
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install agentsor-file==0.2.1
+python -m pip install agentsor-file==0.2.2
 agentsor-file init \
   --format parquet \
   --contract file-contract.toml \
