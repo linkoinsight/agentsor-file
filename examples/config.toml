@@ -1,0 +1,16 @@
+[pipeline]
+input_dir = "../data/inbox"
+output_dir = "../data/output"
+quarantine_dir = "../data/quarantine"
+state_dir = "../data/state"
+output_compression = "zstd"
+allow_extra_columns = false
+amount_column = "amount"
+amount_multiplier = "100"
+amount_output_column = "amount_cents"
+amount_rounding = "half_even"
+
+[schema]
+event_id = "int64"
+amount = "double"
+category = "string"
