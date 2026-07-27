@@ -22,12 +22,14 @@ the local check works.
 
 ## Local quickstart
 
-Python 3.11 or newer is required. Install the published package:
+Linux or macOS and Python 3.11 or newer are required. Windows is not supported
+in this release because local credential safety relies on POSIX owner-only
+file modes. Install the published package:
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install agentsor-file==0.2.2
+python -m pip install agentsor-file==0.2.3
 agentsor-file init \
   --format parquet \
   --contract file-contract.toml \

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentsor-file"
-version = "0.2.2"
+version = "0.2.3"
 description = "Validate local CSV and Parquet schemas and monitor scheduled outputs"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,11 +21,12 @@ keywords = [
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
-  "Operating System :: OS Independent",
+  "Operating System :: POSIX",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = [
