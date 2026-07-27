@@ -1,85 +1,218 @@
-# Parquet Guard reliability demo
+# Agentsor File Contracts
 
-This repository is an **owned engineering demonstration**, not client work and
-not evidence that it has processed a customer's data. It was built to show a
-specific reliability boundary for a filesystem Parquet pipeline:
+Agentsor File Contracts is a free, MIT-licensed command-line tool for checking
+one local CSV or Parquet file against an explicit TOML contract. It checks:
 
-- discover current `.parquet` inputs;
-- validate configured Arrow column names and types before transformation;
-- process valid files independently;
-- quarantine corrupt or schema-drifted files without stopping the batch;
-- externalize paths plus demonstrated transform and compression settings;
-- write outputs and state atomically;
-- key state by source name, source bytes, and processing contract;
-- verify completed output bytes before skipping a rerun; and
-- emit timestamped, run-correlated JSON logs plus content-free result counts.
+- file readability;
+- required columns and Arrow types;
+- unexpected columns;
+- row and byte bounds;
+- optional event-time freshness; and
+- optional duplicate history.
 
-The example transform uses decimal arithmetic to multiply `amount` by the
-configured value, applies the configured rounding rule, and writes integer
-`amount_cents`. The sample uses `half_even`, so midpoint values round to the
-nearest even integer. A real delivery would replace that hook only after the
-buyer supplies transformation fixtures and the destination contract. The demo
-does not guess customer rules, hold credentials, watch partially written files,
-or include a production target adapter.
+`init`, `check`, and `schema` run offline. The separate `report` command checks
+the file locally and sends only the fixed redacted result envelope to the
+single Agentsor collector. The package has no file-upload or telemetry path.
 
-## Run it
+## Local quickstart
 
-Python 3.11 or newer is required.
+Python 3.11 or newer is required. From this checkout:
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install -e '.[dev]'
-pytest
+python -m pip install .
+agentsor-file init \
+  --format parquet \
+  --contract file-contract.toml \
+  --fingerprint-key-file .agentsor-file.key
+```
+
+`init` refuses to replace either target or follow a target symlink. It creates
+a random 32-byte fingerprint key with mode `0600` and never prints the key.
+Edit the generated `[schema]` table to describe the file, then run:
+
+```bash
+agentsor-file check YOUR_FILE.parquet \
+  --contract file-contract.toml \
+  --fingerprint-key-file .agentsor-file.key \
+  --state .agentsor-file-state.json
+```
+
+The `init`, `check`, and `schema` commands make no network requests. The CLI
+requires the fingerprint key to be an owner-only regular file and refuses
+links or group/world-readable modes. Keep it private and stable within one
+project. Back it up if fingerprint continuity matters.
+
+The CLI exits `0` for a passed contract, `1` for a failed or inconclusive
+result, and `2` for a usage, contract, credential, input, transport, or hosted
+receipt error.
+
+## Hosted deadline reporting
+
+After creating a free monitor at
+[agentsor.ai/file-contracts](https://agentsor.ai/file-contracts), put the
+one-time ingest token in an owner-only credential file without placing it in a
+shell argument:
+
+```bash
+mkdir -m 700 -p ~/.config/agentsor
+umask 077
+${EDITOR:-vi} ~/.config/agentsor/file-token
+chmod 600 ~/.config/agentsor/file-token
+```
+
+Then check and submit one redacted result:
+
+```bash
+agentsor-file report YOUR_FILE.parquet \
+  --contract file-contract.toml \
+  --fingerprint-key-file .agentsor-file.key \
+  --token-file ~/.config/agentsor/file-token
+```
+
+`report` has a fixed HTTPS destination, disables inherited proxies and
+redirects, verifies TLS, bounds request/response sizes, validates the complete
+result before network I/O, and never prints the token. It prints a fixed
+acknowledgement containing the run ID, local overall result, duplicate-receipt
+flag, and next hosted deadline.
+
+Hosted reporting does not currently accept `--state`; configure
+`reject_duplicates = false` for that command. Use offline `check --state` when
+local duplicate-output detection is required. This avoids mutating duplicate
+state before a network failure can be retried safely.
+
+## Contract format
+
+```toml
+[contract]
+format = "parquet"
+allow_extra_columns = false
+min_rows = 1
+max_rows = 1000000
+min_bytes = 1
+max_bytes = 104857600
+csv_delimiter = ","
+reject_duplicates = false
+
+# Optional; configure both together.
+# event_time_column = "event_time"
+# max_age_seconds = 86400
+
+[schema]
+id = "string"
+amount = "double"
+# event_time = "timestamp[ms]"
+```
+
+`format` may be `csv` or `parquet`, or omitted when one contract intentionally
+supports both. Schema values use PyArrow type aliases. Parquet physical types
+must match exactly. CSV has no physical type metadata, so required CSV columns
+must safely cast to their configured Arrow types.
+
+Freshness uses the newest non-null event time. Timestamp columns without a
+timezone are interpreted as UTC. `reject_duplicates = true` requires
+`--state`; without usable state, the result is inconclusive. State contains
+only project-keyed output fingerprints and retains the latest 4,096 unique
+values.
+
+## Redacted result envelope
+
+`check` writes exactly one JSON object to stdout. The v1 envelope contains a
+canonical run UUID and UTC timestamps, format, bounded row/byte counts, six
+fixed check statuses, fixed reason codes, and three fingerprints. It does not
+contain file paths, file names, column names, raw values, exception messages,
+or arbitrary text.
+
+The contract, schema, and output fingerprints are domain-separated
+HMAC-SHA256 values keyed by the supplied project key. They support equality
+and drift checks inside that project without exposing a global raw SHA-256
+that could correlate low-entropy files or schemas across projects.
+
+Redaction is not zero knowledge: row/byte counts, timing, outcomes, and
+within-project equality can still reveal metadata. Review that boundary
+before sharing a result.
+
+Print the installed formal JSON Schema with:
+
+```bash
+agentsor-file schema
+```
+
+The fixed checks are `readability`, `schema`, `rowBounds`, `byteBounds`,
+`eventFreshness`, and `duplicate`. Required checks use
+`passed|failed|inconclusive`; the two optional checks may also use
+`not_configured`. Overall status is:
+
+- `passed` when every check is passed or not configured and reasons are empty;
+- `failed` when at least one check failed; or
+- `inconclusive` when none failed and at least one could not complete.
+
+## Python API
+
+```python
+from pathlib import Path
+
+from parquet_guard import check_file, load_file_contract
+
+contract = load_file_contract("file-contract.toml")
+key = Path(".agentsor-file.key").read_bytes()
+result = check_file("output.parquet", contract, fingerprint_key=key)
+print(result.as_dict())
+```
+
+Applications should protect the key at least as carefully as the local CLI
+does and should not log it.
+
+## Deliberate limits
+
+- Files larger than 1 TiB and row counts above 1 trillion are outside the v1
+  result envelope.
+- Files are read locally by PyArrow; set a realistic `max_bytes` to establish
+  a resource boundary before parsing.
+- Duplicate state is atomic and fail-closed but assumes one writer at a time.
+- This release checks completed files; it does not watch producer directories
+  or establish that a producer has finished writing.
+- A same-size file that changes during a run is detected by a second keyed
+  fingerprint and produces an inconclusive result.
+- Hosted reporting sends only aggregate result metadata; it does not send the
+  file, its name or path, column names, values, storage location, or arbitrary
+  notes.
+
+## Historical Parquet demonstration
+
+This repository began as an owned engineering demonstration of a fail-closed,
+idempotent Parquet batch pipeline. That truthful history remains available
+through the compatibility command:
+
+```bash
 python examples/generate_sample.py
 parquet-guard --config examples/config.toml
 ```
 
-Paths in `examples/config.toml` are resolved relative to the configuration
-file. The generator creates a deterministic synthetic fixture in `data/inbox`;
-successful outputs appear in `data/output`, while invalid inputs and small
-reason manifests appear in `data/quarantine`. Successful inputs stay in the
-inbox: the same name and bytes are skipped after output-integrity verification,
-while byte-identical inputs with different names are distinct work items.
+It demonstrates validation, deterministic decimal transformation, quarantine,
+atomic output/state, and rerun integrity. It is not client work and is not
+evidence that customer data has been processed. Agentsor File Contracts does
+not silently invoke or quarantine files through that historical command.
 
-The CLI writes JSON logs to stderr and one summary to stdout. It exits `0` when
-the scan has no quarantines or unexpected failures, `1` when the batch completed
-with either condition, and `2` for invalid configuration.
+## Development
 
-## Acceptance evidence
+```bash
+python -m pip install -e '.[dev]'
+pytest
+ruff check src tests
+python -m build
+```
 
-The tests exercise:
+The tests cover both formats, config validation, redaction, formal envelope
+validation, project-key isolation, schema stability, bounds, freshness,
+duplicate state, fail-closed state handling, CLI exit behavior, secure init,
+and the historical batch demonstration.
 
-1. a valid end-to-end file and deterministic decimal transform;
-2. corrupt and schema-drifted files quarantined without stopping good work;
-3. a same-name/content rerun skipped only through verified durable state;
-4. configuration changes and damaged outputs forcing safe reprocessing;
-5. distinct identity for same-content files with different names;
-6. cross-filesystem quarantine and unexpected per-file failure isolation;
-7. external path and transform configuration; and
-8. a clean-clone sample generator plus invalid-config rejection.
-
-## Deliberate production boundary
-
-Before a customer deployment, the contract still needs measured file volume,
-an arrival-completion signal, exact input/output fixtures, full schema rules
-(including order and nullability if required), transformation rules, one
-destination protocol, rerun semantics, retention, observability, deployment
-topology, and credential handoff. The demo assumes one process runs at a time.
-A production implementation would also add a stable-file/producer handshake,
-destination-specific idempotency, a run lock, backpressure, retention, metrics,
-and integration tests against the authorized target.
-
-## Bounded implementation
-
-For bounded Python, API, PostgreSQL, and data-pipeline implementation with
-explicit acceptance tests and handoff, see the current [Agentsor Automation
-Reliability scope](https://agentsor.ai/).
-
-To discuss one bounded milestone, email
-[hello@agentsor.ai](mailto:hello@agentsor.ai?subject=Bounded%20automation%20milestone)
-with a non-confidential description of the required input, output, stack, and
-pass/fail result. Do not send credentials, source code, personal data,
-production records, or confidential material.
+For bounded implementation work, see
+[Agentsor Automation Reliability](https://agentsor.ai/automation-reliability).
+Do not send
+credentials, source code, personal data, production records, or confidential
+material by email.
 
 License: MIT.

@@ -1,0 +1,18 @@
+[contract]
+format = "parquet"
+allow_extra_columns = false
+min_rows = 1
+max_rows = 100000
+min_bytes = 1
+max_bytes = 104857600
+csv_delimiter = ","
+reject_duplicates = false
+
+# Optional freshness requires both settings and a timestamp column in [schema].
+# event_time_column = "event_time"
+# max_age_seconds = 86400
+
+[schema]
+event_id = "int64"
+amount = "double"
+category = "string"

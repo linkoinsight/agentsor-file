@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentsor:file-contract-result:v1",
+  "title": "Agentsor File Contract Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "contractFingerprint",
+    "startedAt",
+    "finishedAt",
+    "overall",
+    "fileFormat",
+    "rowCount",
+    "byteCount",
+    "schemaFingerprint",
+    "outputFingerprint",
+    "checks",
+    "reasonCodes"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "contractFingerprint": {"$ref": "#/$defs/fingerprint"},
+    "startedAt": {"$ref": "#/$defs/utcTimestamp"},
+    "finishedAt": {"$ref": "#/$defs/utcTimestamp"},
+    "overall": {"enum": ["passed", "failed", "inconclusive"]},
+    "fileFormat": {"enum": ["csv", "parquet"]},
+    "rowCount": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000000
+        },
+        {"type": "null"}
+      ]
+    },
+    "byteCount": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1099511627776
+        },
+        {"type": "null"}
+      ]
+    },
+    "schemaFingerprint": {
+      "oneOf": [
+        {"$ref": "#/$defs/fingerprint"},
+        {"type": "null"}
+      ]
+    },
+    "outputFingerprint": {
+      "oneOf": [
+        {"$ref": "#/$defs/fingerprint"},
+        {"type": "null"}
+      ]
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "readability",
+        "schema",
+        "rowBounds",
+        "byteBounds",
+        "eventFreshness",
+        "duplicate"
+      ],
+      "properties": {
+        "readability": {"$ref": "#/$defs/requiredCheck"},
+        "schema": {"$ref": "#/$defs/requiredCheck"},
+        "rowBounds": {"$ref": "#/$defs/requiredCheck"},
+        "byteBounds": {"$ref": "#/$defs/requiredCheck"},
+        "eventFreshness": {"$ref": "#/$defs/optionalCheck"},
+        "duplicate": {"$ref": "#/$defs/optionalCheck"}
+      }
+    },
+    "reasonCodes": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 8,
+      "items": {
+        "enum": [
+          "file_missing",
+          "file_unreadable",
+          "format_invalid",
+          "schema_drift",
+          "row_count_below_min",
+          "row_count_above_max",
+          "byte_count_below_min",
+          "byte_count_above_max",
+          "event_too_old",
+          "event_time_missing",
+          "duplicate_output",
+          "fingerprint_unavailable",
+          "check_error"
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "checks": {
+            "properties": {"readability": {"const": "passed"}}
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "outputFingerprint": {"$ref": "#/$defs/fingerprint"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checks": {"properties": {"schema": {"const": "passed"}}}
+        }
+      },
+      "then": {
+        "properties": {
+          "schemaFingerprint": {"$ref": "#/$defs/fingerprint"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checks": {"properties": {"rowBounds": {"const": "passed"}}}
+        }
+      },
+      "then": {
+        "properties": {"rowCount": {"type": "integer"}}
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checks": {"properties": {"byteBounds": {"const": "passed"}}}
+        }
+      },
+      "then": {
+        "properties": {"byteCount": {"type": "integer"}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"overall": {"const": "passed"}},
+        "required": ["overall"]
+      },
+      "then": {
+        "properties": {
+          "reasonCodes": {"maxItems": 0},
+          "checks": {
+            "properties": {
+              "readability": {"const": "passed"},
+              "schema": {"const": "passed"},
+              "rowBounds": {"const": "passed"},
+              "byteBounds": {"const": "passed"},
+              "eventFreshness": {
+                "enum": ["passed", "not_configured"]
+              },
+              "duplicate": {
+                "enum": ["passed", "not_configured"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"overall": {"const": "failed"}},
+        "required": ["overall"]
+      },
+      "then": {
+        "properties": {"reasonCodes": {"minItems": 1}},
+        "anyOf": [
+          {"properties": {"checks": {"properties": {"readability": {"const": "failed"}}}}},
+          {"properties": {"checks": {"properties": {"schema": {"const": "failed"}}}}},
+          {"properties": {"checks": {"properties": {"rowBounds": {"const": "failed"}}}}},
+          {"properties": {"checks": {"properties": {"byteBounds": {"const": "failed"}}}}},
+          {"properties": {"checks": {"properties": {"eventFreshness": {"const": "failed"}}}}},
+          {"properties": {"checks": {"properties": {"duplicate": {"const": "failed"}}}}}
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {"overall": {"const": "inconclusive"}},
+        "required": ["overall"]
+      },
+      "then": {
+        "properties": {
+          "reasonCodes": {"minItems": 1},
+          "checks": {
+            "properties": {
+              "readability": {
+                "enum": ["passed", "inconclusive"]
+              },
+              "schema": {"enum": ["passed", "inconclusive"]},
+              "rowBounds": {"enum": ["passed", "inconclusive"]},
+              "byteBounds": {"enum": ["passed", "inconclusive"]},
+              "eventFreshness": {
+                "enum": ["passed", "inconclusive", "not_configured"]
+              },
+              "duplicate": {
+                "enum": ["passed", "inconclusive", "not_configured"]
+              }
+            }
+          }
+        },
+        "anyOf": [
+          {"properties": {"checks": {"properties": {"readability": {"const": "inconclusive"}}}}},
+          {"properties": {"checks": {"properties": {"schema": {"const": "inconclusive"}}}}},
+          {"properties": {"checks": {"properties": {"rowBounds": {"const": "inconclusive"}}}}},
+          {"properties": {"checks": {"properties": {"byteBounds": {"const": "inconclusive"}}}}},
+          {"properties": {"checks": {"properties": {"eventFreshness": {"const": "inconclusive"}}}}},
+          {"properties": {"checks": {"properties": {"duplicate": {"const": "inconclusive"}}}}}
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "requiredCheck": {
+      "enum": ["passed", "failed", "inconclusive"]
+    },
+    "optionalCheck": {
+      "enum": [
+        "passed",
+        "failed",
+        "inconclusive",
+        "not_configured"
+      ]
+    }
+  }
+}
