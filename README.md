@@ -76,4 +76,10 @@ For bounded Python, API, PostgreSQL, and data-pipeline implementation with
 explicit acceptance tests and handoff, see the current [Agentsor Automation
 Reliability scope](https://agentsor.ai/).
 
+To discuss one bounded milestone, email
+[hello@agentsor.ai](mailto:hello@agentsor.ai?subject=Bounded%20automation%20milestone)
+with a non-confidential description of the required input, output, stack, and
+pass/fail result. Do not send credentials, source code, personal data,
+production records, or confidential material.
+
 License: MIT.
