@@ -95,6 +95,9 @@ state before a network failure can be retried safely.
 
 ## Monitor a scheduled export from cron
 
+For a start-to-finish setup using one consistent unprivileged path layout, see
+[validate a Parquet schema and monitor cron outputs](https://agentsor.ai/file-contracts/guides/validate-parquet-schema-cron).
+
 Put the producer and the receipt in one fail-closed script:
 
 ```sh
