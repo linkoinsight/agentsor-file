@@ -1,5 +1,8 @@
 # Agentsor File Contracts
 
+**Check and validate a Parquet or CSV file schema locally, then monitor every
+scheduled output.**
+
 Agentsor File Contracts is a free, MIT-licensed command-line tool for checking
 one local CSV or Parquet file against an explicit TOML contract. It checks:
 
@@ -14,14 +17,17 @@ one local CSV or Parquet file against an explicit TOML contract. It checks:
 the file locally and sends only the fixed redacted result envelope to the
 single Agentsor collector. The package has no file-upload or telemetry path.
 
+[Create one free missed-run monitor](https://agentsor.ai/file-contracts) after
+the local check works.
+
 ## Local quickstart
 
-Python 3.11 or newer is required. From this checkout:
+Python 3.11 or newer is required. Install the published package:
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install .
+python -m pip install agentsor-file==0.2.1
 agentsor-file init \
   --format parquet \
   --contract file-contract.toml \
@@ -47,6 +53,11 @@ project. Back it up if fingerprint continuity matters.
 The CLI exits `0` for a passed contract, `1` for a failed or inconclusive
 result, and `2` for a usage, contract, credential, input, transport, or hosted
 receipt error.
+
+This validates an expected schema rather than merely printing the schema that
+happens to be present. `init` creates the contract once; after you review its
+`[schema]`, each `check` compares required columns and Arrow types, unexpected
+columns, freshness, and row/byte bounds against that explicit contract.
 
 ## Hosted deadline reporting
 
@@ -81,6 +92,34 @@ Hosted reporting does not currently accept `--state`; configure
 `reject_duplicates = false` for that command. Use offline `check --state` when
 local duplicate-output detection is required. This avoids mutating duplicate
 state before a network failure can be retried safely.
+
+## Monitor a scheduled export from cron
+
+Put the producer and the receipt in one fail-closed script:
+
+```sh
+#!/bin/sh
+set -eu
+
+/opt/orders/bin/export-daily-orders
+/opt/orders/.venv/bin/agentsor-file report \
+  /srv/orders/daily-orders.parquet \
+  --contract /opt/orders/file-contract.toml \
+  --fingerprint-key-file /opt/orders/credentials/file-fingerprint.key \
+  --token-file /opt/orders/credentials/agentsor-file-token
+```
+
+Then schedule that script with the cadence selected for the free monitor:
+
+```cron
+5 7 * * * /opt/orders/bin/run-daily-export >>/var/log/orders-export.log 2>&1
+```
+
+If the producer never reaches `report`, the hosted deadline detects the
+missing receipt. If it creates an unreadable, stale, empty, oversized, or
+schema-changed file, `report` submits the fixed redacted failure result and
+exits nonzero. Keep the script and all credential files owner-only. The same
+pattern works for CSV by changing the contract format and input path.
 
 ## Contract format
 

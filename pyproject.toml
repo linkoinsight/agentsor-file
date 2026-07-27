@@ -4,13 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentsor-file"
-version = "0.2.0"
-description = "Local CSV and Parquet contracts with redacted hosted receipts"
+version = "0.2.1"
+description = "Validate local CSV and Parquet schemas and monitor scheduled outputs"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Agentsor" }]
-keywords = ["csv", "parquet", "data-contracts", "schema-validation"]
+keywords = [
+  "csv",
+  "parquet",
+  "data-contracts",
+  "schema-validation",
+  "file-monitoring",
+  "data-freshness",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
