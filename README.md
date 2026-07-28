@@ -267,10 +267,4 @@ validation, project-key isolation, schema stability, bounds, freshness,
 duplicate state, fail-closed state handling, CLI exit behavior, secure init,
 and the historical batch demonstration.
 
-For bounded implementation work, see
-[Agentsor Automation Reliability](https://agentsor.ai/automation-reliability).
-Do not send
-credentials, source code, personal data, production records, or confidential
-material by email.
-
 License: MIT.
