@@ -1,10 +1,13 @@
 # Agentsor File Contracts
 
-**Check and validate a Parquet or CSV file schema locally, then monitor every
-scheduled output.**
+**Validate a downloaded partner CSV or Parquet feed locally after your existing
+SFTP, S3, or export job, then get a hosted alert when its rolling receipt
+deadline is missed.**
 
 Agentsor File Contracts is a free, MIT-licensed command-line tool for checking
-one local CSV or Parquet file against an explicit TOML contract. It checks:
+one completed local CSV or Parquet file against an explicit TOML contract. It
+runs after the existing pickup or export job exposes the final file; it is not
+an SFTP client, storage connector, or directory watcher. It checks:
 
 - file readability;
 - required columns and Arrow types;
@@ -17,8 +20,9 @@ one local CSV or Parquet file against an explicit TOML contract. It checks:
 the file locally and sends only the fixed redacted result envelope to the
 single Agentsor collector. The package has no file-upload or telemetry path.
 
-[Create one free missed-run monitor](https://agentsor.ai/file-contracts) after
-the local check works.
+[Follow the daily partner-feed guide](https://agentsor.ai/file-contracts/guides/monitor-daily-partner-file-feed)
+for a complete after-download setup, then create one free missed-run monitor
+after the local check works.
 
 ## Local quickstart
 
@@ -95,29 +99,30 @@ Hosted reporting does not currently accept `--state`; configure
 local duplicate-output detection is required. This avoids mutating duplicate
 state before a network failure can be retried safely.
 
-## Monitor a scheduled export from cron
+## Monitor a partner feed after SFTP, S3, or export pickup
 
 For a start-to-finish setup using one consistent unprivileged path layout, see
-[validate a Parquet schema and monitor cron outputs](https://agentsor.ai/file-contracts/guides/validate-parquet-schema-cron).
+[monitor a daily partner CSV or Parquet feed after download](https://agentsor.ai/file-contracts/guides/monitor-daily-partner-file-feed).
+The guide keeps the file, rows, path, filename, and transfer credentials local.
 
-Put the producer and the receipt in one fail-closed script:
+Put the existing pickup or producer and the receipt in one fail-closed script:
 
 ```sh
 #!/bin/sh
 set -eu
 
-/opt/orders/bin/export-daily-orders
-/opt/orders/.venv/bin/agentsor-file report \
-  /srv/orders/daily-orders.parquet \
-  --contract /opt/orders/file-contract.toml \
-  --fingerprint-key-file /opt/orders/credentials/file-fingerprint.key \
-  --token-file /opt/orders/credentials/agentsor-file-token
+/opt/partner-feed/bin/fetch-daily-feed
+/opt/partner-feed/.venv/bin/agentsor-file report \
+  /srv/partner-feed/inbound/daily-feed.parquet \
+  --contract /opt/partner-feed/file-contract.toml \
+  --fingerprint-key-file /opt/partner-feed/credentials/file-fingerprint.key \
+  --token-file /opt/partner-feed/credentials/agentsor-file-token
 ```
 
 Then schedule that script with the cadence selected for the free monitor:
 
 ```cron
-5 7 * * * /opt/orders/bin/run-daily-export >>/var/log/orders-export.log 2>&1
+5 7 * * * /opt/partner-feed/bin/run-daily-feed >>/var/log/partner-feed.log 2>&1
 ```
 
 If the producer never reaches `report`, the hosted deadline detects the

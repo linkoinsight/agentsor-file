@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agentsor-file"
 version = "0.2.3"
-description = "Validate local CSV and Parquet schemas and monitor scheduled outputs"
+description = "Validate downloaded partner CSV/Parquet feeds and monitor rolling receipt deadlines"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -17,6 +17,9 @@ keywords = [
   "schema-validation",
   "file-monitoring",
   "data-freshness",
+  "partner-feeds",
+  "sftp",
+  "s3",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",
