@@ -28,7 +28,9 @@ after the local check works.
 
 Linux or macOS and Python 3.11 or newer are required. Windows is not supported
 in this release because local credential safety relies on POSIX owner-only
-file modes. Install the published package:
+file modes. No Agentsor account or server-issued key is required for `init`,
+`check`, or `schema`; `init` creates the random fingerprint key locally at
+the path you provide. Install the published package:
 
 ```bash
 python3 -m venv .venv
