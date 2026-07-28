@@ -51,6 +51,13 @@ agentsor-file check YOUR_FILE.parquet \
   --state .agentsor-file-state.json
 ```
 
+A fresh `agentsor-file==0.2.3` install produced the result below for a
+deterministic synthetic three-row Parquet sample. The preview selects only
+stable fields from the real JSON output; run IDs, timestamps, and keyed
+fingerprints are intentionally omitted.
+
+![Agentsor File Contracts checking a synthetic Parquet partner feed](docs/assets/agentsor-file-terminal.png)
+
 The `init`, `check`, and `schema` commands make no network requests. The CLI
 requires the fingerprint key to be an owner-only regular file and refuses
 links or group/world-readable modes. Keep it private and stable within one
