@@ -31,7 +31,7 @@ in this release because local credential safety relies on POSIX owner-only
 file modes. Install the published package:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install agentsor-file==0.2.3
 agentsor-file init \
