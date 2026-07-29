@@ -77,9 +77,12 @@ columns, freshness, and row/byte bounds against that explicit contract.
 ## Hosted deadline reporting
 
 After creating a free monitor at
-[agentsor.ai/file-contracts](https://agentsor.ai/file-contracts), put the
-one-time ingest token in an owner-only credential file without placing it in a
-shell argument:
+[agentsor.ai/file-contracts](https://agentsor.ai/file-contracts), activation
+shows two separate credentials once. Put the `fr1_` reporting token in an
+owner-only credential file without placing it in a shell argument. Store the
+`fm1_` management token separately from the reporting job; it cannot submit
+receipts and is used only to
+[permanently close that monitor](https://agentsor.ai/file-contracts/close).
 
 ```bash
 mkdir -m 700 -p ~/.config/agentsor
@@ -102,6 +105,12 @@ redirects, verifies TLS, bounds request/response sizes, validates the complete
 result before network I/O, and never prints the token. It prints a fixed
 acknowledgement containing the run ID, local overall result, duplicate-receipt
 flag, and next hosted deadline.
+
+Closing a monitor rejects future reports, stops its rolling deadline and new
+alerts, and discards queued alerts that have not been sent. An alert already
+accepted by or in flight to the email provider may still arrive. Closure is
+permanent, but it is not account or historical-data deletion; those requests
+follow the [privacy notice](https://agentsor.ai/file-contracts/privacy).
 
 Hosted reporting does not currently accept `--state`; configure
 `reject_duplicates = false` for that command. Use offline `check --state` when
