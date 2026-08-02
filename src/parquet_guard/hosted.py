@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from http.client import HTTPException
 import json
 import os
 from pathlib import Path
 import re
 import ssl
 import stat
+import time
 from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import (
@@ -31,6 +33,9 @@ HOSTED_FILE_RUN_ENDPOINT = "https://agentsor.ai/api/v1/file-runs"
 MAX_REQUEST_BYTES = 8_192
 MAX_RESPONSE_BYTES = 8_192
 DEFAULT_TIMEOUT_SECONDS = 15
+DEFAULT_RETRY_DELAY_SECONDS = 1
+MAX_RETRY_AFTER_SECONDS = 60
+_RETRYABLE_HTTP_STATUSES = frozenset({408, 500, 502, 503, 504, *range(520, 528)})
 _INGEST_TOKEN_RE = re.compile(r"^fr1_[A-Za-z0-9_-]{43}$")
 _FINGERPRINT_RE = re.compile(r"^[0-9a-f]{64}$")
 _UTC_TIMESTAMP_RE = re.compile(
@@ -417,7 +422,7 @@ def _http_error_code(error: HTTPError) -> str:
         return "invalid_ingest_token"
     if error.code == 429:
         return "rate_limited"
-    if error.code == 503:
+    if error.code in _RETRYABLE_HTTP_STATUSES:
         return "temporarily_unavailable"
     if error.code == 409:
         try:
@@ -441,45 +446,75 @@ def _http_error_code(error: HTTPError) -> str:
     return "report_rejected"
 
 
+def _retry_delay_seconds(error: HTTPError | None = None) -> int | None:
+    if error is None:
+        return DEFAULT_RETRY_DELAY_SECONDS
+    retry_after = error.headers.get("Retry-After") if error.headers else None
+    if retry_after is None:
+        return DEFAULT_RETRY_DELAY_SECONDS
+    if (
+        not isinstance(retry_after, str)
+        or re.fullmatch(r"[0-9]{1,3}", retry_after) is None
+    ):
+        return None
+    delay = int(retry_after)
+    return delay if 0 <= delay <= MAX_RETRY_AFTER_SECONDS else None
+
+
 def post_run_envelope(
     envelope: Mapping[str, object],
     *,
     token_file: Path,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> HostedReceipt:
-    """Post one local result to the single supported hosted endpoint."""
+    """Post one result, replaying its exact bytes once after ambiguity."""
 
     if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 60:
         raise HostedReportError("transport_error")
     body, run_id = _encode_envelope(envelope)
     token = _read_ingest_token(token_file)
-    request = Request(
-        HOSTED_FILE_RUN_ENDPOINT,
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "agentsor-file/0.2",
-            "Connection": "close",
-        },
-    )
-    try:
-        with _build_opener().open(
-            request,
-            timeout=timeout_seconds,
-        ) as response:
-            if response.status != 202:
-                raise HostedReportError("report_rejected")
-            content_type = response.headers.get("Content-Type", "")
-            if content_type.split(";", 1)[0].strip().lower() != "application/json":
-                raise HostedReportError("invalid_receipt")
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
-    except HostedReportError:
-        raise
-    except HTTPError as exc:
-        raise HostedReportError(_http_error_code(exc)) from exc
-    except (URLError, OSError, TimeoutError) as exc:
-        raise HostedReportError("transport_error") from exc
-    return _decode_receipt(raw, run_id)
+    for attempt in range(2):
+        request = Request(
+            HOSTED_FILE_RUN_ENDPOINT,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "agentsor-file/0.2",
+                "Connection": "close",
+            },
+        )
+        try:
+            with _build_opener().open(
+                request,
+                timeout=timeout_seconds,
+            ) as response:
+                if response.status != 202:
+                    raise HostedReportError("report_rejected")
+                content_type = response.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    raise HostedReportError("invalid_receipt")
+                raw = response.read(MAX_RESPONSE_BYTES + 1)
+            return _decode_receipt(raw, run_id)
+        except HTTPError as exc:
+            code = _http_error_code(exc)
+            retry_delay = (
+                _retry_delay_seconds(exc)
+                if attempt == 0 and exc.code in _RETRYABLE_HTTP_STATUSES
+                else None
+            )
+            if retry_delay is None:
+                raise HostedReportError(code) from exc
+            exc.close()
+            time.sleep(retry_delay)
+        except HostedReportError as exc:
+            if attempt != 0 or exc.code != "invalid_receipt":
+                raise
+            time.sleep(DEFAULT_RETRY_DELAY_SECONDS)
+        except (URLError, OSError, TimeoutError, HTTPException) as exc:
+            if attempt != 0:
+                raise HostedReportError("transport_error") from exc
+            time.sleep(DEFAULT_RETRY_DELAY_SECONDS)
+    raise AssertionError("bounded hosted-report attempts were exhausted")
