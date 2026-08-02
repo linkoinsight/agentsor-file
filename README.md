@@ -24,6 +24,9 @@ single Agentsor collector. The package has no file-upload or telemetry path.
 for a complete after-download setup, then create one free missed-run monitor
 after the local check works.
 
+Local check already passed?
+[Create one free monitor](https://agentsor.ai/file-contracts#start).
+
 ## Local quickstart
 
 Linux or macOS and Python 3.11 or newer are required. Windows is not supported
@@ -76,11 +79,10 @@ columns, freshness, and row/byte bounds against that explicit contract.
 
 ## Hosted deadline reporting
 
-After creating a free monitor at
-[agentsor.ai/file-contracts](https://agentsor.ai/file-contracts), activation
-shows two separate credentials once. Put the `fr1_` reporting token in an
-owner-only credential file without placing it in a shell argument. Store the
-`fm1_` management token separately from the reporting job; it cannot submit
+After [creating one free monitor](https://agentsor.ai/file-contracts#start),
+activation shows two separate credentials once. Put the `fr1_` reporting token
+in an owner-only credential file without placing it in a shell argument. Store
+the `fm1_` management token separately from the reporting job; it cannot submit
 receipts and is used only to
 [permanently close that monitor](https://agentsor.ai/file-contracts/close).
 
