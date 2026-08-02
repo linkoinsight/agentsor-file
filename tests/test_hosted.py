@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import stat
 from types import SimpleNamespace
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from uuid import uuid4
 
 import pytest
@@ -64,11 +64,11 @@ class FakeResponse:
         return None
 
 
-def receipt_body(run_id: str) -> bytes:
+def receipt_body(run_id: str, *, duplicate: bool = False) -> bytes:
     return json.dumps(
         {
             "accepted": True,
-            "duplicate": False,
+            "duplicate": duplicate,
             "runId": run_id,
             "deadlineState": "on_time",
             "nextExpectedAt": "2026-07-28T12:00:00Z",
@@ -100,6 +100,120 @@ def test_post_uses_only_fixed_endpoint_and_bearer_file(
     assert str(receipt.run_id) == value["runId"]
     assert receipt.deadline_state == "on_time"
     assert receipt.duplicate is False
+
+
+def test_exact_duplicate_receipt_is_a_success(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    value = envelope()
+    monkeypatch.setattr(
+        hosted,
+        "_build_opener",
+        lambda: SimpleNamespace(
+            open=lambda *_args, **_kwargs: FakeResponse(
+                receipt_body(value["runId"], duplicate=True)
+            )
+        ),
+    )
+
+    receipt = post_run_envelope(value, token_file=token_file(tmp_path))
+
+    assert str(receipt.run_id) == value["runId"]
+    assert receipt.duplicate is True
+
+
+def test_ambiguous_transport_retries_the_exact_encoded_run_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    value = envelope()
+    sent_bodies: list[bytes] = []
+    delays: list[int] = []
+
+    class AmbiguousThenDuplicateOpener:
+        def open(self, request: object, timeout: int) -> FakeResponse:
+            assert timeout == 15
+            sent_bodies.append(bytes(request.data))
+            if len(sent_bodies) == 1:
+                raise URLError("response lost after possible commit")
+            return FakeResponse(receipt_body(value["runId"], duplicate=True))
+
+    monkeypatch.setattr(
+        hosted,
+        "_build_opener",
+        lambda: AmbiguousThenDuplicateOpener(),
+    )
+    monkeypatch.setattr(hosted.time, "sleep", delays.append)
+
+    receipt = post_run_envelope(value, token_file=token_file(tmp_path))
+
+    assert receipt.duplicate is True
+    assert sent_bodies == [sent_bodies[0], sent_bodies[0]]
+    assert json.loads(sent_bodies[0])["runId"] == value["runId"]
+    assert delays == [hosted.DEFAULT_RETRY_DELAY_SECONDS]
+
+
+def test_invalid_success_receipt_retries_the_exact_encoded_run_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    value = envelope()
+    sent_bodies: list[bytes] = []
+    delays: list[int] = []
+
+    class InvalidThenDuplicateOpener:
+        def open(self, request: object, timeout: int) -> FakeResponse:
+            assert timeout == 15
+            sent_bodies.append(bytes(request.data))
+            return FakeResponse(
+                (
+                    b'{"accepted":true}'
+                    if len(sent_bodies) == 1
+                    else receipt_body(value["runId"], duplicate=True)
+                )
+            )
+
+    monkeypatch.setattr(
+        hosted,
+        "_build_opener",
+        lambda: InvalidThenDuplicateOpener(),
+    )
+    monkeypatch.setattr(hosted.time, "sleep", delays.append)
+
+    receipt = post_run_envelope(value, token_file=token_file(tmp_path))
+
+    assert receipt.duplicate is True
+    assert sent_bodies == [sent_bodies[0], sent_bodies[0]]
+    assert delays == [hosted.DEFAULT_RETRY_DELAY_SECONDS]
+
+
+def test_ambiguous_transport_stops_after_one_exact_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+    delays: list[int] = []
+
+    class AlwaysAmbiguousOpener:
+        def open(self, _request: object, timeout: int) -> FakeResponse:
+            nonlocal calls
+            assert timeout == 15
+            calls += 1
+            raise URLError("still ambiguous")
+
+    monkeypatch.setattr(
+        hosted,
+        "_build_opener",
+        lambda: AlwaysAmbiguousOpener(),
+    )
+    monkeypatch.setattr(hosted.time, "sleep", delays.append)
+
+    with pytest.raises(HostedReportError, match="^transport_error$"):
+        post_run_envelope(envelope(), token_file=token_file(tmp_path))
+
+    assert calls == 2
+    assert delays == [hosted.DEFAULT_RETRY_DELAY_SECONDS]
 
 
 @pytest.mark.parametrize("mode", [0o604, 0o640, 0o644])
@@ -200,16 +314,26 @@ def test_mismatched_or_duplicate_receipt_is_rejected(
         b'"accepted": true',
         b'"accepted": true, "accepted": true',
     )
+    calls = 0
+    delays: list[int] = []
+
+    def invalid_response(*_args: object, **_kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return nullcontext(FakeResponse(bad))
+
     monkeypatch.setattr(
         hosted,
         "_build_opener",
-        lambda: SimpleNamespace(
-            open=lambda *_args, **_kwargs: nullcontext(FakeResponse(bad))
-        ),
+        lambda: SimpleNamespace(open=invalid_response),
     )
+    monkeypatch.setattr(hosted.time, "sleep", delays.append)
 
     with pytest.raises(HostedReportError, match="invalid_receipt"):
         post_run_envelope(value, token_file=token_file(tmp_path))
+
+    assert calls == 2
+    assert delays == [hosted.DEFAULT_RETRY_DELAY_SECONDS]
 
 
 def test_token_file_permissions_are_actually_private(tmp_path: Path) -> None:
@@ -245,18 +369,104 @@ def test_fixed_hosted_rejections_are_actionable_without_body_echo(
     expected: str,
 ) -> None:
     value = envelope()
+    calls = 0
+    delays: list[int] = []
 
     class RejectingOpener:
         def open(self, request: object, timeout: int) -> object:
+            nonlocal calls
+            calls += 1
+            headers = {"Content-Type": "application/json"}
+            if status == 503:
+                headers["Retry-After"] = "60"
             raise HTTPError(
                 request.full_url,
                 status,
                 "must not be echoed",
-                {"Content-Type": "application/json"},
+                headers,
                 io.BytesIO(body),
             )
 
     monkeypatch.setattr(hosted, "_build_opener", lambda: RejectingOpener())
+    monkeypatch.setattr(hosted.time, "sleep", delays.append)
 
     with pytest.raises(HostedReportError, match=f"^{expected}$"):
         post_run_envelope(value, token_file=token_file(tmp_path))
+
+    assert calls == (2 if status == 503 else 1)
+    assert delays == ([60] if status == 503 else [])
+
+
+@pytest.mark.parametrize(
+    "status",
+    [408, 500, 502, 504, *range(520, 528)],
+)
+def test_transient_http_failure_retries_once_then_accepts_duplicate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+) -> None:
+    value = envelope()
+    sent_bodies: list[bytes] = []
+    delays: list[int] = []
+
+    class TransientThenDuplicateOpener:
+        def open(self, request: object, timeout: int) -> FakeResponse:
+            assert timeout == 15
+            sent_bodies.append(bytes(request.data))
+            if len(sent_bodies) == 1:
+                raise HTTPError(
+                    request.full_url,
+                    status,
+                    "transient",
+                    {"Content-Type": "text/plain"},
+                    io.BytesIO(b""),
+                )
+            return FakeResponse(receipt_body(value["runId"], duplicate=True))
+
+    monkeypatch.setattr(
+        hosted,
+        "_build_opener",
+        lambda: TransientThenDuplicateOpener(),
+    )
+    monkeypatch.setattr(hosted.time, "sleep", delays.append)
+
+    receipt = post_run_envelope(value, token_file=token_file(tmp_path))
+
+    assert receipt.duplicate is True
+    assert sent_bodies == [sent_bodies[0], sent_bodies[0]]
+    assert delays == [hosted.DEFAULT_RETRY_DELAY_SECONDS]
+
+
+@pytest.mark.parametrize("retry_after", ["61", "-1", "tomorrow", "1.5"])
+def test_unbounded_retry_after_fails_without_an_internal_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    retry_after: str,
+) -> None:
+    calls = 0
+
+    class UnboundedRetryOpener:
+        def open(self, request: object, timeout: int) -> object:
+            nonlocal calls
+            assert timeout == 15
+            calls += 1
+            raise HTTPError(
+                request.full_url,
+                503,
+                "transient",
+                {"Retry-After": retry_after},
+                io.BytesIO(b""),
+            )
+
+    monkeypatch.setattr(hosted, "_build_opener", lambda: UnboundedRetryOpener())
+    monkeypatch.setattr(
+        hosted.time,
+        "sleep",
+        lambda _delay: pytest.fail("unbounded retry must not sleep"),
+    )
+
+    with pytest.raises(HostedReportError, match="^temporarily_unavailable$"):
+        post_run_envelope(envelope(), token_file=token_file(tmp_path))
+
+    assert calls == 1
