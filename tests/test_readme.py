@@ -4,12 +4,8 @@ import re
 
 
 README = Path(__file__).resolve().parents[1] / "README.md"
-HOSTED_ACTIVATION_EXECUTABLE = (
-    "~/.local/share/agentsor-file/venv/bin/agentsor-file"
-)
-SHELL_SCRIPT_EXECUTABLE = (
-    '"$HOME/.local/share/agentsor-file/venv/bin/agentsor-file"'
-)
+HOSTED_ACTIVATION_EXECUTABLE = "~/.local/share/agentsor-file/venv/bin/agentsor-file"
+SHELL_SCRIPT_EXECUTABLE = '"$HOME/.local/share/agentsor-file/venv/bin/agentsor-file"'
 
 
 def test_readme_runtime_path_matches_hosted_activation_handoff() -> None:
