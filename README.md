@@ -139,7 +139,7 @@ Put the existing pickup or producer and the receipt in one fail-closed script:
 set -eu
 
 /opt/partner-feed/bin/fetch-daily-feed
-/opt/partner-feed/.venv/bin/agentsor-file report \
+"$HOME/.local/share/agentsor-file/venv/bin/agentsor-file" report \
   /srv/partner-feed/inbound/daily-feed.parquet \
   --contract /opt/partner-feed/file-contract.toml \
   --fingerprint-key-file /opt/partner-feed/credentials/file-fingerprint.key \
@@ -212,7 +212,7 @@ before sharing a result.
 Print the installed formal JSON Schema with:
 
 ```bash
-agentsor-file schema
+~/.local/share/agentsor-file/venv/bin/agentsor-file schema
 ```
 
 The fixed checks are `readability`, `schema`, `rowBounds`, `byteBounds`,
