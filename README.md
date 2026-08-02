@@ -38,7 +38,7 @@ the path you provide. Install the published package:
 ```bash
 install -d -m 700 ~/.local/share/agentsor-file
 python3 -m venv ~/.local/share/agentsor-file/venv
-~/.local/share/agentsor-file/venv/bin/python -m pip install agentsor-file==0.2.4
+~/.local/share/agentsor-file/venv/bin/python -m pip install agentsor-file==0.2.5
 ~/.local/share/agentsor-file/venv/bin/agentsor-file init \
   --format parquet \
   --contract file-contract.toml \
@@ -57,7 +57,7 @@ then edit the generated `[schema]` table to describe the expected file and run:
   --state .agentsor-file-state.json
 ```
 
-A fresh `agentsor-file==0.2.4` install produced the result below for a
+A fresh `agentsor-file==0.2.5` install produced the result below for a
 deterministic synthetic three-row Parquet sample. The preview selects only
 stable fields from the real JSON output; run IDs, timestamps, and keyed
 fingerprints are intentionally omitted.
