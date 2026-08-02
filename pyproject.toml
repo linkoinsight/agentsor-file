@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentsor-file"
-version = "0.2.3"
+version = "0.2.4"
 description = "Validate downloaded partner CSV/Parquet feeds and monitor rolling receipt deadlines"
 readme = "README.md"
 requires-python = ">=3.11"
