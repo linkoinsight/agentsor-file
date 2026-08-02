@@ -35,7 +35,7 @@ the path you provide. Install the published package:
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install agentsor-file==0.2.3
+python -m pip install agentsor-file==0.2.4
 agentsor-file init \
   --format parquet \
   --contract file-contract.toml \
@@ -53,7 +53,7 @@ agentsor-file check YOUR_FILE.parquet \
   --state .agentsor-file-state.json
 ```
 
-A fresh `agentsor-file==0.2.3` install produced the result below for a
+A fresh `agentsor-file==0.2.4` install produced the result below for a
 deterministic synthetic three-row Parquet sample. The preview selects only
 stable fields from the real JSON output; run IDs, timestamps, and keyed
 fingerprints are intentionally omitted.
@@ -105,6 +105,12 @@ redirects, verifies TLS, bounds request/response sizes, validates the complete
 result before network I/O, and never prints the token. It prints a fixed
 acknowledgement containing the run ID, local overall result, duplicate-receipt
 flag, and next hosted deadline.
+
+If the first hosted response is lost, transient, or invalid, `report` retries
+once with the exact already-validated envelope bytes and run ID. The server
+can therefore return the original idempotent receipt without running the local
+check again or creating a second run. Definitive rejections are not retried,
+and the command never loops.
 
 Closing a monitor rejects future reports, stops its rolling deadline and new
 alerts, and discards queued alerts that have not been sent. An alert already
