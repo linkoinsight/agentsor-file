@@ -47,7 +47,8 @@ agentsor-file init \
 
 `init` refuses to replace either target or follow a target symlink. It creates
 a random 32-byte fingerprint key with mode `0600` and never prints the key.
-Edit the generated `[schema]` table to describe the file, then run:
+Use the guide's [offline schema-discovery command](https://agentsor.ai/file-contracts/guides/monitor-daily-partner-file-feed#contract),
+then edit the generated `[schema]` table to describe the expected file and run:
 
 ```bash
 agentsor-file check YOUR_FILE.parquet \
