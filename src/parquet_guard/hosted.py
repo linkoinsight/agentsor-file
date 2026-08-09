@@ -167,6 +167,12 @@ def _build_opener() -> Any:
     )
 
 
+def _utc_now() -> datetime:
+    """Return the current UTC time through one deterministic test seam."""
+
+    return datetime.now(timezone.utc)
+
+
 def _read_ingest_token(path: Path) -> str:
     """Read one owner-only regular file without following a symlink."""
 
@@ -260,7 +266,7 @@ def _validate_envelope(envelope: Mapping[str, object]) -> uuid.UUID:
 
     started_at = _utc_timestamp(envelope["startedAt"])
     finished_at = _utc_timestamp(envelope["finishedAt"])
-    current = datetime.now(timezone.utc)
+    current = _utc_now()
     if (
         started_at > finished_at
         or finished_at - started_at > _MAX_RUN_DURATION
