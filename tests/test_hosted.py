@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
 import io
 import json
 from pathlib import Path
@@ -13,6 +14,27 @@ import pytest
 
 from parquet_guard import hosted
 from parquet_guard.hosted import HostedReportError, post_run_envelope
+
+
+FIXED_NOW = datetime(2026, 7, 27, 12, 0, 2, tzinfo=timezone.utc)
+REAL_UTC_NOW = hosted._utc_now
+
+
+@pytest.fixture(autouse=True)
+def fixed_hosted_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hosted, "_utc_now", lambda: FIXED_NOW)
+
+
+def utc_timestamp(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def test_real_clock_returns_aware_utc_datetime() -> None:
+    current = REAL_UTC_NOW()
+
+    assert isinstance(current, datetime)
+    assert current.tzinfo is timezone.utc
+    assert current.utcoffset() == timedelta(0)
 
 
 def envelope() -> dict[str, object]:
@@ -38,6 +60,36 @@ def envelope() -> dict[str, object]:
         },
         "reasonCodes": [],
     }
+
+
+def test_run_age_boundary_is_stable() -> None:
+    value = envelope()
+    boundary = FIXED_NOW - hosted._MAX_RUN_AGE
+    value["startedAt"] = utc_timestamp(boundary)
+    value["finishedAt"] = utc_timestamp(boundary)
+
+    assert hosted._validate_envelope(value).int != 0
+
+    older = boundary - timedelta(microseconds=1)
+    value["startedAt"] = utc_timestamp(older)
+    value["finishedAt"] = utc_timestamp(older)
+    with pytest.raises(ValueError, match="invalid run timestamps"):
+        hosted._validate_envelope(value)
+
+
+def test_future_clock_skew_boundary_is_stable() -> None:
+    value = envelope()
+    boundary = FIXED_NOW + hosted._MAX_CLOCK_SKEW
+    value["startedAt"] = utc_timestamp(boundary)
+    value["finishedAt"] = utc_timestamp(boundary)
+
+    assert hosted._validate_envelope(value).int != 0
+
+    future = boundary + timedelta(microseconds=1)
+    value["startedAt"] = utc_timestamp(future)
+    value["finishedAt"] = utc_timestamp(future)
+    with pytest.raises(ValueError, match="invalid run timestamps"):
+        hosted._validate_envelope(value)
 
 
 def token_file(tmp_path: Path) -> Path:
